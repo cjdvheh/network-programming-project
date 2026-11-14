@@ -27,6 +27,7 @@ public class ClientHandler extends Thread {
     private volatile String displayName = null;  // 로그인 전에는 null
     private volatile GameRoom currentRoom = null; // 대기실에 있으면 null
     private volatile boolean closed = false;
+    private volatile boolean broken = false;   // 전송 실패로 연결이 끊긴 상태
     private final Object closeLock = new Object();
 
     // 주의: 생성자에서는 스트림만 만든다. readUTF()는 run()에서 한다.
@@ -45,6 +46,10 @@ public class ClientHandler extends Thread {
 
     public String getDisplayName() {
         return displayName == null ? "(로그인 전)" : displayName;
+    }
+
+    public boolean isLoggedIn() {
+        return displayName != null;
     }
 
     // 현재 들어가 있는 게임방 (RoomManager가 잠금 안에서 바꾼다)
@@ -123,15 +128,21 @@ public class ClientHandler extends Thread {
             return;
         }
         nickname = nickname.trim();
-        if (nickname.isEmpty() || nickname.length() > 10
-                || nickname.contains("|") || nickname.contains(",")) {
+        if (nickname.isEmpty() || nickname.length() > 10 || MessageProtocol.hasReservedChar(nickname)
+                || nickname.matches(".*[()\\[\\]].*")) {   // 괄호는 "(방장)", "[마피아]" 같은 화면 표시와 헷갈림
             send(MessageProtocol.build(MessageProtocol.LOGIN_FAIL,
-                    "닉네임은 1~10자이며 | 와 , 는 사용할 수 없습니다."));
+                    "닉네임은 1~10자이며 | , ; ( ) [ ] 는 사용할 수 없습니다."));
             return;
         }
 
-        // 로그인 성공 순서 + 닉네임 => 표시 이름. 번호가 항상 다르므로 중복 검사가 필요 없다.
-        displayName = clientManager.nextNumber() + "_" + nickname;
+        if (!clientManager.registerName(nickname)) {
+            send(MessageProtocol.build(MessageProtocol.LOGIN_FAIL,
+                    "중복된 닉네임입니다. 다른 닉네임을 선택하세요."));
+            return;
+        }
+
+        // 닉네임 중복 검사를 통과했으므로 닉네임을 그대로 표시 이름으로 쓴다.
+        displayName = nickname;
         send(MessageProtocol.build(MessageProtocol.LOGIN_OK, displayName));
         server.appendLog("로그인: " + displayName + " (현재 접속자 " + clientManager.count() + "명)");
 
@@ -182,11 +193,13 @@ public class ClientHandler extends Thread {
     // 이 클라이언트에게 메시지 전송
     // 여러 스레드가 동시에 같은 클라이언트에게 보낼 수 있으므로 dos를 잠근다.
     public void send(String msg) {
+        if(broken || closed) return;
         try {
             synchronized (dos) {
                 dos.writeUTF(msg);
             }
         } catch (IOException e) {
+            broken = true;
             server.appendLog("전송 실패: " + getDisplayName());
             // 여기서 close()를 바로 부르면, 대기실/방 잠금을 잡은 스레드가 다른 잠금을
             // 기다리게 되어 교착 상태가 생길 수 있다. 소켓만 닫으면 이 클라이언트의

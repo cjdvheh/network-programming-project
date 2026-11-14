@@ -28,7 +28,7 @@ public class MessageProtocol {
     public static final String ROOM_ENTER = "ROOM_ENTER";     // ROOM_ENTER|방번호,방제목  (방 생성/입장 성공)
     public static final String ROOM_FAIL = "ROOM_FAIL";       // ROOM_FAIL|사유
     public static final String ROOM_USERS = "ROOM_USERS";     // ROOM_USERS|방장,참가자1,참가자2,...  (첫 값은 방장, 이후는 방장을 포함한 전체 참가자)
-    public static final String ROOM_MSG = "ROOM_MSG";         // ROOM_MSG|채팅 또는 알림 한 줄
+    public static final String ROOM_MSG = "ROOM_MSG";         // ROOM_MSG|알림 한 줄 (채팅은 CHAT)
     public static final String GAME_STARTED = "GAME_STARTED"; // GAME_STARTED|직업 구성 요약
     public static final String ROLE = "ROLE";                 // ROLE|내 직업 이름 (본인에게만 전송)
     public static final String MAFIA_TEAM = "MAFIA_TEAM";     // MAFIA_TEAM|마피아1,마피아2  (마피아에게만 전송)
@@ -36,6 +36,9 @@ public class MessageProtocol {
     public static final String TIME = "TIME";                 // TIME|남은초  (1초마다)
     public static final String ALIVE = "ALIVE";               // ALIVE|생존자1,생존자2,...
     public static final String GAME_END = "GAME_END";         // GAME_END|승리 팀 안내
+    public static final String USER_JOIN = "USER_JOIN";
+    public static final String USER_LEAVE = "USER_LEAVE";
+    public static final String CHAT = "CHAT";   // CHAT|종류,보낸사람,내용  (ChatMessageData.toBody)
 
     // 방 상태 (ROOM_LIST 안에서 사용)
     public static final String STATE_WAITING = "WAITING";

@@ -1,6 +1,7 @@
 package Project.Ui;
 
 import Project.Game.GameRule;
+import Project.Protocol.ChatMessageData;
 import Project.Protocol.MessageProtocol;
 import Project.User.Client;
 
@@ -19,9 +20,6 @@ import java.util.Set;
 //          [능력 사용 / 투표] 버튼, 낮 토론에는 [시간 연장] 버튼.
 // 채팅 가능 여부(사망자, 밤의 비마피아)는 서버가 최종 판단하고, 화면은 입력창을 막아서 안내만 한다.
 public class GameRoomFrame extends JFrame {
-    private static final Color NIGHT_BG = new Color(32, 36, 48);
-    private static final Color NIGHT_FG = new Color(225, 225, 235);
-
     private final Client client;   // null이면 서버 없이 화면만 보기
     private final String displayName;
 
@@ -31,7 +29,7 @@ public class GameRoomFrame extends JFrame {
     private final JLabel lblPlayerTitle = new JLabel("참가자 (0/" + GameRule.MAX_PLAYERS + ")", SwingConstants.CENTER);
     private final DefaultListModel<String> playerModel = new DefaultListModel<>();
     private final JList<String> playerList = new JList<>(playerModel);
-    private final JTextArea logArea = new JTextArea();
+    private final ChatPanel chat = new ChatPanel();
     private final JTextField txtChat = new JTextField();
     private final JButton btnSend = new JButton("전송");
     private final JButton btnStart = new JButton("게임 시작");
@@ -53,15 +51,15 @@ public class GameRoomFrame extends JFrame {
     // 화면만 확인하는 미리보기용 main (서버 실행 없이 이 파일만 실행하면 된다)
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            GameRoomFrame f = new GameRoomFrame(null, "1_철수", 1, "초보환영");
-            f.onMessage("ROOM_USERS|1_철수,1_철수,2_영희,3_민수,4_지수");
+            GameRoomFrame f = new GameRoomFrame(null, "철수", 1, "초보환영");
+            f.onMessage("ROOM_USERS|철수,철수,영희,민수,지수");
             f.onMessage("GAME_STARTED|마피아 1명, 경찰 1명, 의사 1명, 시민 1명");
             f.onMessage("ROLE|마피아");
-            f.onMessage("MAFIA_TEAM|1_철수");
-            f.onMessage("ALIVE|1_철수,2_영희,3_민수,4_지수");
+            f.onMessage("MAFIA_TEAM|철수");
+            f.onMessage("ALIVE|철수,영희,민수,지수");
             f.onMessage("PHASE|NIGHT,1,30");
             f.onMessage("ROOM_MSG|[알림] 1일차 밤이 되었습니다. (30초)");
-            f.onMessage("ROOM_MSG|[마피아 채팅] [1_철수] 누구로 할까?");
+            f.onMessage("CHAT|MAFIA_CHAT,철수,누구로 할까?");
             f.setVisible(true);
         });
     }
@@ -113,9 +111,6 @@ public class GameRoomFrame extends JFrame {
 
     // 중앙: 왼쪽 채팅/알림 + 오른쪽 참가자 목록(대상 선택)
     private JPanel buildCenter() {
-        logArea.setEditable(false);
-        logArea.setLineWrap(true);
-        logArea.setWrapStyleWord(true);
         playerList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
         JLabel hint = new JLabel("대상은 목록에서 클릭", SwingConstants.CENTER);
@@ -129,7 +124,7 @@ public class GameRoomFrame extends JFrame {
         userPanel.setPreferredSize(new Dimension(200, 0));
 
         JPanel center = new JPanel(new BorderLayout(10, 0));
-        center.add(new JScrollPane(logArea), BorderLayout.CENTER);
+        center.add(chat, BorderLayout.CENTER);   // ChatPanel이 스크롤을 직접 가지고 있다
         center.add(userPanel, BorderLayout.EAST);
         return center;
     }
@@ -254,11 +249,6 @@ public class GameRoomFrame extends JFrame {
         } else {
             txtChat.setToolTipText(!amAlive() ? "사망한 플레이어는 채팅할 수 없습니다" : "밤에는 마피아만 대화할 수 있습니다");
         }
-
-        // 밤에는 채팅창을 어둡게
-        boolean night = playing && MessageProtocol.PHASE_NIGHT.equals(phase);
-        logArea.setBackground(night ? NIGHT_BG : Color.WHITE);
-        logArea.setForeground(night ? NIGHT_FG : Color.BLACK);
     }
 
     private void showPhase(String p, int d, int seconds) {
@@ -289,11 +279,6 @@ public class GameRoomFrame extends JFrame {
         lblRole.setForeground("마피아".equals(role) ? new Color(190, 0, 0) : new Color(0, 70, 160));
     }
 
-    public void appendLog(String line) {
-        logArea.append(line + "\n");
-        logArea.setCaretPosition(logArea.getDocument().getLength());
-    }
-
     // ==================== 서버 통신 ====================
 
     private void send(String msg) {
@@ -306,7 +291,7 @@ public class GameRoomFrame extends JFrame {
         if (client != null) {
             client.send(MessageProtocol.build(MessageProtocol.ROOM_CHAT, text));
         } else {
-            appendLog("[" + displayName + "] " + text);   // 미리보기
+            chat.addMessage(displayName, text, true);   // 미리보기
         }
         txtChat.setText("");
     }
@@ -361,8 +346,15 @@ public class GameRoomFrame extends JFrame {
                 updateControls();
                 break;
             }
+            case MessageProtocol.CHAT:
+                ChatMessageData data = ChatMessageData.fromBody(body);
+                if (data == null) break;                       // 형식이 잘못된 메시지는 무시
+                String name = data.getSender();
+                if (data.getType() == ChatMessageData.Type.MAFIA_CHAT) name += " (마피아)";
+                chat.addMessage(name, data.getText(), data.getSender().equals(displayName));
+                break;
             case MessageProtocol.ROOM_MSG:
-                appendLog(body);
+                chat.addNotice(body);                          // 이제 ROOM_MSG는 모두 알림
                 break;
             case MessageProtocol.GAME_STARTED:
                 playing = true;
@@ -413,9 +405,10 @@ public class GameRoomFrame extends JFrame {
                 JOptionPane.showMessageDialog(this, body, "알림", JOptionPane.WARNING_MESSAGE);
                 break;
             case MessageProtocol.DISCONNECTED:
-                JOptionPane.showMessageDialog(this, "서버와 연결이 끊어졌습니다.");
-                System.exit(0);
+                LoginFrame.askReconnect(this, displayName);
                 break;
         }
     }
+
+
 }

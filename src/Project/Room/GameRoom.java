@@ -2,6 +2,7 @@ package Project.Room;
 
 import Project.Game.GameRule;
 import Project.Game.MafiaGame;
+import Project.Protocol.ChatMessageData;
 import Project.Protocol.MessageProtocol;
 import Project.Server.ClientHandler;
 
@@ -17,6 +18,7 @@ public class GameRoom {
     private final int id;
     private final String title;
     private final String password;   // 빈 문자열이면 공개방
+
     private final List<ClientHandler> players = new ArrayList<>();   // 입장 순서
     private ClientHandler host;
     private State state = State.WAITING;
@@ -77,7 +79,9 @@ public class GameRoom {
             game.chat(from, text);
             return;
         }
-        broadcast(MessageProtocol.build(MessageProtocol.ROOM_MSG, "[" + from.getDisplayName() + "] " + text));
+        ChatMessageData data = new ChatMessageData(ChatMessageData.Type.CHAT, from.getDisplayName(), text);
+        broadcast(MessageProtocol.build(MessageProtocol.CHAT, data.toBody()));
+
     }
 
     // 참가자 목록 전송. 형식: "방장,참가자1,참가자2,..." (첫 값은 방장, 이후는 방장을 포함한 전체 참가자)
@@ -117,4 +121,5 @@ public class GameRoom {
         state = State.WAITING;
         game = null;
     }
+
 }

@@ -23,6 +23,8 @@ public class WaitingRoomFrame extends JFrame {
     // 서버에서 받은 방 정보 원본. 표의 행 순서와 같다. {번호, 제목, 현재인원, 최대인원, 상태, 비밀(1/0)}
     private final List<String[]> rooms = new ArrayList<>();
 
+    private boolean devAutoJoin = false;   // 개발용: 방 목록에 방이 보이면 첫 번째 방에 자동 입장
+
     private final DefaultListModel<String> userModel = new DefaultListModel<>();
     private final JLabel lblUserTitle = new JLabel("대기실 접속자 (0명)", SwingConstants.CENTER);
 
@@ -44,8 +46,8 @@ public class WaitingRoomFrame extends JFrame {
     // 화면만 확인하는 미리보기용 main (서버 실행 없이 이 파일만 실행하면 된다)
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            WaitingRoomFrame f = new WaitingRoomFrame(null, "1_철수");
-            f.updateUserList("1_철수,2_영희,3_민수");
+            WaitingRoomFrame f = new WaitingRoomFrame(null, "철수");
+            f.updateUserList("철수,영희,민수");
             // 서버가 보내는 ROOM_LIST 내용과 같은 형식
             f.applyRoomList("1,초보환영,3,8,WAITING,0;2,고수만,8,8,PLAYING,1;3,친구끼리,2,8,WAITING,1");
             f.setVisible(true);
@@ -195,15 +197,15 @@ public class WaitingRoomFrame extends JFrame {
 
     // ---- 화면 갱신 메서드 (서버 메시지 처리나 미리보기에서 호출) ----
 
-    // 대기실 접속자 목록 갱신. 형식: "1_철수,2_영희"
+    // 대기실 접속자 목록 갱신. 형식: "철수,영희"
     public void updateUserList(String csv) {
         userModel.clear();
         if (!csv.isEmpty()) {
-            for (String name : csv.split(",")) {
+            for (String name : csv.split(MessageProtocol.FIELD_SEP)) {
                 userModel.addElement(name);
             }
         }
-        lblUserTitle.setText("대기실 접속자 (" + userModel.size() + "명)");
+        refreshUserCount();
     }
 
     // 방 목록 갱신. 한 행 = {번호, 방 제목, 인원, 상태}
@@ -240,7 +242,45 @@ public class WaitingRoomFrame extends JFrame {
                 break;
             }
         }
+
+        if (devAutoJoin && !rooms.isEmpty() && client != null) {
+            devAutoJoin = false;   // 한 번만 시도
+            client.send(MessageProtocol.build(MessageProtocol.ROOM_JOIN,
+                    rooms.get(0)[0] + MessageProtocol.FIELD_SEP));   // 비밀번호 없음
+        }
     }
+
+    // ---- 개발용 (DevLauncher에서 호출) ----
+
+    // 공개방을 바로 만든다. 성공하면 서버가 ROOM_ENTER를 보내 게임방으로 이동한다.
+    public void devCreateRoom(String title) {
+        if (client != null) {
+            client.send(MessageProtocol.build(MessageProtocol.ROOM_CREATE, title + MessageProtocol.FIELD_SEP));
+        }
+    }
+
+    // 방이 생기면(ROOM_LIST에 보이면) 첫 번째 방에 들어간다. 방이 아직 없으면 다음 목록 갱신까지 기다린다.
+    public void devJoinFirstRoom() {
+        devAutoJoin = true;
+    }
+
+    private void refreshUserCount() {
+        lblUserTitle.setText("대기실 접속자 (" + userModel.size() + "명)");
+    }
+
+    private void addUser(String name){
+        if(!userModel.contains(name)){
+            userModel.addElement(name);
+            refreshUserCount();
+        }
+
+    }
+
+    private void removeUser(String name){
+        userModel.removeElement(name);
+        refreshUserCount();
+    }
+
 
     // ---- 서버 통신 ----
 
@@ -267,8 +307,14 @@ public class WaitingRoomFrame extends JFrame {
                 JOptionPane.showMessageDialog(this, m[1], "알림", JOptionPane.WARNING_MESSAGE);
                 break;
             case MessageProtocol.DISCONNECTED:
-                JOptionPane.showMessageDialog(this, "서버와 연결이 끊어졌습니다.");
-                System.exit(0);
+                // 다시 접속할지 묻고, 예를 누르면 닉네임을 채운 로그인 창을 연다
+                LoginFrame.askReconnect(this, displayName);
+                break;
+            case MessageProtocol.USER_JOIN:
+                addUser(m[1]);
+                break;
+            case MessageProtocol.USER_LEAVE:
+                removeUser(m[1]);
                 break;
         }
     }

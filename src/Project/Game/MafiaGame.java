@@ -1,5 +1,6 @@
 package Project.Game;
 
+import Project.Protocol.ChatMessageData;
 import Project.Protocol.MessageProtocol;
 import Project.Room.GameRoom;
 import Project.Server.ClientHandler;
@@ -15,7 +16,7 @@ import java.util.*;
 //       경찰은 1명 조사(즉시 결과). 마피아 대상과 의사 대상이 같으면 생존, 다르면 사망.
 // - 낮: 토론. 살아 있는 사람마다 하루 1번 시간 연장(+EXTEND_SECONDS초) 가능.
 // - 투표: 최다 득표자 1명은 바로 사망. (동점이거나 아무도 투표하지 않으면 처형 없음)
-// - 채팅: 사망자는 채팅 불가. 밤에는 마피아끼리만 채팅 가능하고 다른 직업에게는 보이지 않는다.
+// - 채팅: 사망자는 채팅 불가. 밤에는 마피아끼리만 채팅 가능하고 마피아와 사망자에게만 보인다.
 //
 // 주의: GameRoom과 마찬가지로 RoomManager의 잠금 안에서만 호출된다. (따로 잠그지 않음)
 public class MafiaGame {
@@ -48,9 +49,6 @@ public class MafiaGame {
     }
 
     public boolean isFinished() { return finished; }
-    public Phase getPhase() { return phase; }
-    public Role getRole(ClientHandler user) { return roles.get(user); }
-    public boolean isAlive(ClientHandler user) { return alive.contains(user); }
 
     // ==================== 시작 ====================
 
@@ -255,7 +253,7 @@ public class MafiaGame {
                 investigated.add(user);
                 boolean isMafia = roles.get(target) == Role.MAFIA;
                 tell(user, "[경찰] 조사 결과: " + target.getDisplayName() + "님은 "
-                        + (isMafia ? "마피아입니다!" : "마피아가 아닙니다. (시민)"));
+                        + (isMafia ? "마피아입니다!" : "마피아가 아닙니다. (시민 팀)"));
                 return null;
             default:
                 return "사용할 수 있는 능력이 없습니다.";
@@ -295,7 +293,7 @@ public class MafiaGame {
 
     // ==================== 채팅 ====================
 
-    // 게임 중 채팅. 사망자는 불가, 밤에는 마피아끼리만.
+    // 게임 중 채팅. 사망자는 쓸 수 없고(보기는 가능), 밤에는 마피아끼리만 대화한다.
     public void chat(ClientHandler user, String text) {
         if (!alive.contains(user)) {
             tell(user, "[알림] 사망한 플레이어는 채팅할 수 없습니다.");
@@ -306,12 +304,17 @@ public class MafiaGame {
                 tell(user, "[알림] 밤에는 마피아만 대화할 수 있습니다.");
                 return;
             }
-            tellMafia("[마피아 채팅] [" + user.getDisplayName() + "] " + text);   // 마피아에게만 전송
+            sendToMafiaAndDead(chatMessage(ChatMessageData.Type.MAFIA_CHAT, user, text));
             return;
         }
-        room.broadcast(MessageProtocol.build(MessageProtocol.ROOM_MSG, "[" + user.getDisplayName() + "] " + text));
+        room.broadcast(chatMessage(ChatMessageData.Type.CHAT, user, text));
     }
 
+    // 채팅 한 줄을 전송용 문자열로 만든다. 예) "CHAT|CHAT,영희,안녕"
+    private String chatMessage(ChatMessageData.Type type, ClientHandler user, String text) {
+        ChatMessageData data = new ChatMessageData(type, user.getDisplayName(), text);
+        return MessageProtocol.build(MessageProtocol.CHAT, data.toBody());
+    }
     // ==================== 퇴장 ====================
 
     // 게임 중 방을 나가거나 연결이 끊긴 경우: 사망 처리 후 승패 확인
@@ -339,10 +342,12 @@ public class MafiaGame {
         broadcastAlive();
     }
 
+
+
     // 사망 발표 뒤에 본인에게만 안내
     private void tellDead(ClientHandler user) {
         if (user != null && room.contains(user)) {
-            tell(user, "[알림] 당신은 사망했습니다. 이제 채팅·능력·투표를 할 수 없고 게임을 지켜볼 수 있습니다.");
+            tell(user, "[알림] 당신은 사망했습니다. 채팅·능력·투표는 할 수 없지만, 마피아 채팅을 포함한 모든 대화를 볼 수 있습니다.");
         }
     }
 
@@ -395,16 +400,28 @@ public class MafiaGame {
         room.broadcast(MessageProtocol.build(MessageProtocol.ALIVE, String.join(MessageProtocol.FIELD_SEP, names)));
     }
 
-    // 한 사람에게만 보이는 메시지
+
+    // 한 사람에게만 보이는 알림
     private void tell(ClientHandler user, String text) {
         user.send(MessageProtocol.build(MessageProtocol.ROOM_MSG, text));
     }
 
-    // 방에 있는 마피아에게만 보이는 메시지 (다른 직업에게는 전송하지 않는다)
+    // 마피아에게만 보이는 알림 (지목 알림 등)
     private void tellMafia(String text) {
-        String msg = MessageProtocol.build(MessageProtocol.ROOM_MSG, text);
+        sendToMafia(MessageProtocol.build(MessageProtocol.ROOM_MSG, text));
+    }
+
+    // 완성된 메시지를 마피아에게만 전송
+    private void sendToMafia(String msg) {
         for (ClientHandler u : room.getPlayers()) {
             if (roles.get(u) == Role.MAFIA) u.send(msg);
+        }
+    }
+
+    // 완성된 메시지를 마피아와 사망자에게 전송 (밤 마피아 채팅용)
+    private void sendToMafiaAndDead(String msg) {
+        for (ClientHandler u : room.getPlayers()) {
+            if (roles.get(u) == Role.MAFIA || !alive.contains(u)) u.send(msg);
         }
     }
 

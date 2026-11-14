@@ -195,7 +195,7 @@ public class RoomManager {
 
     // 대기실 전원에게 방 목록 전송
     private void broadcastRoomList() {
-        waitingRoom.broadcast(roomListMessage());
+        waitingRoom.broadcastAll(roomListMessage());
     }
 
     private String roomListMessage() {

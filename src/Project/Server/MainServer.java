@@ -20,9 +20,13 @@ public class MainServer extends JFrame {
     private final RoomManager roomManager = new RoomManager(waitingRoom, this::appendLog);
 
     public static void main(String[] args) {
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception e) {
+            // 실패하면 기본 모양(Metal)으로 그냥 실행된다
+        }
         SwingUtilities.invokeLater(() -> new MainServer().setVisible(true));
     }
-
     public MainServer() {
         setTitle("Mafia Server");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -64,7 +68,6 @@ public class MainServer extends JFrame {
             appendLog("서버 시작 실패: " + ex.getMessage());
             return;
         }
-        //appendLog("Mafia Server Running..");
         btnServerStart.setText("Mafia Server Running..");
         btnServerStart.setEnabled(false);
         txtPortNumber.setEnabled(false);

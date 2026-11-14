@@ -7,6 +7,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.io.IOException;
+import java.util.function.Consumer;
 
 public class LoginFrame extends JFrame {
     private final JTextField username = new JTextField();
@@ -14,8 +15,14 @@ public class LoginFrame extends JFrame {
     private final JTextField port = new JTextField("30000");
     private final JButton btnConnect = new JButton("Connect");
     private Client client;
+    private Consumer<WaitingRoomFrame> onWaitingRoom;   // 개발용: 대기실이 열리면 실행할 동작
 
     public static void main(String[] args) {
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception e) {
+            // 실패하면 기본 모양(Metal)으로 그냥 실행된다
+        }
         SwingUtilities.invokeLater(() -> new LoginFrame().setVisible(true));
     }
 
@@ -43,8 +50,37 @@ public class LoginFrame extends JFrame {
 
     // 개발용: 닉네임을 채우고 바로 접속한다. (로그인에 성공하면 onMessage가 대기실을 연다)
     public void autoLogin(String nickname) {
+        autoLogin(nickname, null);
+    }
+
+    // 개발용: 자동 로그인 후 대기실이 열리면 onWaitingRoom을 실행한다. (예: 방 생성 / 방 입장)
+    public void autoLogin(String nickname, Consumer<WaitingRoomFrame> onWaitingRoom) {
+        this.onWaitingRoom = onWaitingRoom;
         username.setText(nickname);
         connect();
+    }
+
+    public static void askReconnect(JFrame current, String nickname)
+    {
+        int answer = JOptionPane.showConfirmDialog(current,
+                "서버와 연결이 끊어졌습니다. 다시 접속할까요?" ,
+                "연결 끊김", JOptionPane.YES_NO_OPTION);
+
+        if (answer == JOptionPane.YES_OPTION)
+        {
+            LoginFrame login = new LoginFrame();
+            login.setNickname(nickname);
+            login.setLocationRelativeTo(current);   // 원래 창 자리에 띄우기
+            login.setVisible(true);
+            current.dispose();                      // 끊긴 화면 닫기
+        }
+        else{
+            System.exit(0);
+        }
+    }
+    // 닉네임 칸을 미리 채운다. (다시 접속할 때 사용)
+    public void setNickname(String nickname) {
+        username.setText(nickname);
     }
     //접속버튼 & 이름입력칸 이벤트 함수
     private void connect() {
@@ -72,7 +108,9 @@ public class LoginFrame extends JFrame {
         String[] m = MessageProtocol.parse(msg);
         switch (m[0]) {
             case MessageProtocol.LOGIN_OK:
-                new WaitingRoomFrame(client, m[1]).setVisible(true);   // m[1] = 내 표시 이름
+                WaitingRoomFrame waiting = new WaitingRoomFrame(client, m[1]);   // m[1] = 내 표시 이름
+                waiting.setVisible(true);
+                if (onWaitingRoom != null) onWaitingRoom.accept(waiting);
                 dispose();
                 break;
             case MessageProtocol.LOGIN_FAIL:
