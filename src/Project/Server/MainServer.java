@@ -1,5 +1,6 @@
 package Project.Server;
 
+import Project.Room.RoomManager;
 import Project.Room.WaitingRoom;
 
 import javax.swing.*;
@@ -8,7 +9,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 
-// 서버 실행 창. 기존 JavaChatServer의 GUI와 AcceptServer를 그대로 가져왔다.
+// 서버 실행 창. 포트를 입력받아 서버를 시작하고, 접속·로그인 기록을 로그창에 보여준다.
 public class MainServer extends JFrame {
     private JTextArea textArea;
     private JTextField txtPortNumber;
@@ -16,6 +17,7 @@ public class MainServer extends JFrame {
     JButton btnServerStart;
     private final ClientManager clientManager = new ClientManager();
     private final WaitingRoom waitingRoom = new WaitingRoom();
+    private final RoomManager roomManager = new RoomManager(waitingRoom, this::appendLog);
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new MainServer().setVisible(true));
@@ -69,7 +71,7 @@ public class MainServer extends JFrame {
         new AcceptServer().start();
     }
 
-    // 새 접속을 계속 받는 스레드 (기존 AcceptServer)
+    // 새 접속을 계속 받는 스레드
     class AcceptServer extends Thread {
         @Override
         public void run() {
@@ -79,8 +81,8 @@ public class MainServer extends JFrame {
                     Socket clientSocket = serverSocket.accept();
                     appendLog("새로운 접속 from " + clientSocket);
 
-                    ClientHandler handler =
-                            new ClientHandler(clientSocket, MainServer.this, clientManager, waitingRoom);
+                    ClientHandler handler = new ClientHandler(clientSocket, MainServer.this,
+                            clientManager, waitingRoom, roomManager);
                     clientManager.add(handler);
                     handler.start();
                 } catch (IOException e) {

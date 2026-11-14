@@ -9,7 +9,7 @@ import java.io.IOException;
 import java.net.Socket;
 import java.util.function.Consumer;
 
-//클라의 통신만 담당
+//*본인이 작성함*
 //모든 화면이 해당 객체를 공유
 public class Client {
     private Socket socket;
@@ -17,6 +17,7 @@ public class Client {
     private DataOutputStream dos;
     private volatile Consumer<String> listener;
 
+    //소켓, 입출력 스트림 지정, 스레드 생성 및 시작 함수
     public void connect(String ip, int port) throws IOException {
         socket = new Socket(ip, port);
         dos = new DataOutputStream(socket.getOutputStream());
@@ -32,7 +33,7 @@ public class Client {
 
     public void send(String msg) {
         try {
-            synchronized (dos) {
+            synchronized (dos) {//스레드 안전
                 dos.writeUTF(msg);
             }
         } catch (IOException e) {

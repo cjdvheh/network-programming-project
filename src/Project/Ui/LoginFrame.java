@@ -41,12 +41,12 @@ public class LoginFrame extends JFrame {
         username.addActionListener(e -> connect());
     }
 
-    // 개발용: 닉네임을 채우고 바로 접속한다. (로그인 성공 시 기존 코드가 대기실을 연다)
+    // 개발용: 닉네임을 채우고 바로 접속한다. (로그인에 성공하면 onMessage가 대기실을 연다)
     public void autoLogin(String nickname) {
         username.setText(nickname);
         connect();
     }
-
+    //접속버튼 & 이름입력칸 이벤트 함수
     private void connect() {
         String nickname = username.getText().trim();
         if (nickname.isEmpty()) {

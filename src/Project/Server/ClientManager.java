@@ -4,10 +4,12 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
-//서버에 접속한 모든 사용자를 관리 , 모든 방 포함
-//
+//*본인이 작성함*
+// 서버에 접속한 모든 사용자를 관리한다. (로그인 전 사용자 포함, 게임방은 RoomManager가 관리)
 public class ClientManager {
+    // 쓰기 시 배열 복사본을 만들어 스레드 안전 (읽기는 잠그지 않음)
     private final List<ClientHandler> clients = new CopyOnWriteArrayList<>();
+    //원자적 int
     private final AtomicInteger sequence = new AtomicInteger(0);
 
     public void add(ClientHandler client) {
